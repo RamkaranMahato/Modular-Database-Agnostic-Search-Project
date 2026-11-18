@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.mcpsearch</groupId>
+        <artifactId>mcp-search-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>search-schema</artifactId>
+    <packaging>jar</packaging>
+    <name>MCP Search :: Schema</name>
+    <description>
+        Whole-schema search orchestration: given a query, select the relevant tables
+        (hybrid embedding-shortlist then optional LLM refine), expand along foreign-key
+        relationships, run hybrid search against each selected table via search-core's
+        SearchAdapter, and fuse the results across tables with RRF.
+
+        The graph/traversal/selection/fusion logic here is pure and depends only on
+        search-core + the JDK. The I/O edges (live information_schema reads, real embedding
+        and LLM calls) are behind SPI interfaces in this module; concrete JDBC/LLM
+        implementations that need a real environment are marked as such.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.mcpsearch</groupId>
+            <artifactId>search-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

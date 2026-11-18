@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.mcpsearch</groupId>
+        <artifactId>mcp-search-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>search-mcp-server-app</artifactId>
+    <packaging>jar</packaging>
+    <name>MCP Search :: Server :: App</name>
+    <description>
+        Standalone runnable Spring Boot application. Depends on the starter (which auto-configures
+        the adapter and the MCP tool) plus a JDBC driver, and adds an embedding provider and the
+        optional whole-schema search tool. This is the artifact you actually run: `java -jar`.
+
+        Ships with the MySQL driver by default (matches the user's setup); the Postgres driver is
+        included but commented, swap if needed.
+
+        NOTE: targets Spring Boot 4.1 / Spring AI 2.0. Could not be compiled in the build sandbox
+        (no access to Spring/Spring AI artifacts), so treat the first `mvn package` on a real
+        machine as the compile check.
+    </description>
+
+    <properties>
+        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- the starter brings the adapter auto-config + MCP tool exposure -->
+        <dependency>
+            <groupId>io.mcpsearch</groupId>
+            <artifactId>search-mcp-server-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- whole-schema search (optional tool); brings search-schema onto the classpath -->
+        <dependency>
+            <groupId>io.mcpsearch</groupId>
+            <artifactId>search-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- JDBC driver: MySQL by default (matches the current setup) -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- To use Postgres instead, comment the MySQL driver above and uncomment this:
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        -->
+
+        <!-- Spring AI OpenAI client, used here to back both the EmbeddingProvider and the
+             optional LLM table-refiner. Swap for spring-ai-starter-model-bedrock etc. as needed. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>io.mcpsearch.app.SearchServerApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

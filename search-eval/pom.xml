@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.mcpsearch</groupId>
+        <artifactId>mcp-search-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>search-eval</artifactId>
+    <packaging>jar</packaging>
+    <name>MCP Search :: Eval</name>
+    <description>
+        Search quality evaluation: IR metrics (precision@k, recall@k, MRR, NDCG@k) and a runner
+        that executes a golden set of judged queries against any search function.
+
+        Depends on nothing - the search function is injected as query -> ranked ids - so the
+        harness is unit-testable with stubs and can equally drive a real adapter in an
+        integration test, or A/B two configurations against the same golden set.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,120 @@
+# =============================================================================
+# MCP Search - MySQL configuration
+# =============================================================================
+# Drop this in as your Spring Boot application.yml (or merge the blocks into an
+# existing one). It configures the MCP search server to run hybrid
+# (full-text + semantic) search over a MySQL table.
+#
+# REQUIREMENTS:
+#   - MySQL 9.0 or newer  (the VECTOR type + DISTANCE() functions do NOT exist
+#     on 8.x; on 8.x you can only use text search - see the note at the bottom)
+#   - a FULLTEXT index covering the columns listed under search.mysql.text-columns
+#   - the MySQL JDBC driver on your runtime classpath (com.mysql:mysql-connector-j)
+#   - an embedding provider bean if you want the server to embed queries for you
+#     (otherwise callers must pass precomputed vectors) - see note at the bottom
+# =============================================================================
+
+spring:
+  # --- standard Spring Boot DataSource - this is what gives the adapter its
+  #     connection; the adapter does NOT manage connections itself ---
+  datasource:
+    url: jdbc:mysql://localhost:3306/mydb
+    username: myuser
+    password: ${DB_PASSWORD}          # supply via env var, don't hard-code
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # --- MCP server transport (Spring AI) ---
+  ai:
+    mcp:
+      server:
+        name: mysql-search-server
+        version: 1.0.0
+        protocol: STREAMABLE          # Streamable-HTTP transport
+
+# =============================================================================
+# MCP Search feature configuration
+# =============================================================================
+search:
+  datasource:
+    type: mysql                       # selects the MySQL adapter
+
+  mysql:
+    table: products                   # table to search
+    id-column: id                     # unique/primary key column (needed for upsert)
+
+    # Full-text columns. IMPORTANT: these must be covered by a MySQL FULLTEXT
+    # index, e.g.:
+    #   ALTER TABLE products ADD FULLTEXT INDEX ft_products (title, body);
+    # MATCH ... AGAINST can only search columns that have such an index - it
+    # cannot search an arbitrary expression the way Postgres's tsvector can.
+    text-columns:
+      - title
+      - body
+
+    # Semantic/vector column. Must be declared as a native VECTOR column on
+    # MySQL 9.0+, sized to your embedding model's dimensions, e.g.:
+    #   ALTER TABLE products ADD COLUMN embedding VECTOR(1536);
+    # (1536 = OpenAI text-embedding-3-small; match YOUR model's dimensionality.)
+    # Omit this whole line if you only want full-text search.
+    vector-column: embedding
+
+    # Distance metric for the vector channel: COSINE | DOT | EUCLIDEAN
+    distance-metric: COSINE
+
+    # Columns returned in each hit's "source". Omit for SELECT * (all columns).
+    select-columns:
+      - id
+      - title
+      - price
+
+  # --- how the two channels are combined for HYBRID queries ---
+  hybrid:
+    default-mode: RRF                  # RRF (recommended, no tuning) | WEIGHTED
+    default-alpha: 0.5                 # only used when default-mode = WEIGHTED
+    default-top-k: 10
+
+  # --- MCP tool metadata (optional; these are the defaults) ---
+  mcp:
+    tool-name: search
+    tool-description: Hybrid full-text and semantic search over the configured datastore.
+
+# =============================================================================
+# ONE-TIME SCHEMA SETUP (run once against your database, not part of this file)
+# =============================================================================
+#   -- full-text index over the text-columns above:
+#   ALTER TABLE products ADD FULLTEXT INDEX ft_products (title, body);
+#
+#   -- vector column (MySQL 9.0+ only), sized to your embedding model:
+#   ALTER TABLE products ADD COLUMN embedding VECTOR(1536);
+#
+#   -- (optional, MySQL 9.0+) a vector index for larger tables; note the
+#   --  community edition's vector indexing is limited - benchmark before
+#   --  relying on it at scale, and it's fine to skip for modest row counts:
+#   -- CREATE VECTOR INDEX vidx_products ON products (embedding);
+#
+# =============================================================================
+# EMBEDDINGS - how the vector column gets populated (read this if new to vectors)
+# =============================================================================
+# The database does NOT compute embeddings. Something has to turn text into the
+# vector that goes in the `embedding` column, and turn each query into a vector
+# to compare against. That "something" is an embedding model (OpenAI, Bedrock,
+# a local model), called via an EmbeddingProvider bean in your app. Two options:
+#
+#   1. Precompute: run your rows through the model in a batch/ingestion job and
+#      INSERT with the embedding already filled in. Good for bulk-loading.
+#   2. Let the adapter embed: define an EmbeddingProvider bean; then indexing a
+#      row without a vector, or searching by text, will call it automatically.
+#
+# The SAME model must be used for indexing and querying, and its output
+# dimensionality must match the VECTOR(n) column size. Switching models later
+# means re-embedding the whole table.
+#
+# =============================================================================
+# IF YOU ARE ON MYSQL 8.x (no native VECTOR type)
+# =============================================================================
+# Vector/hybrid search is not natively possible. Options, roughly:
+#   - drop `vector-column` and `distance-metric` above and use text-only search
+#     (MATCH ... AGAINST works fine on 8.x);
+#   - upgrade to MySQL 9.0+;
+#   - or use a separate vector store for the semantic channel.
+# Ask before going down the 8.x path - it changes the design meaningfully.

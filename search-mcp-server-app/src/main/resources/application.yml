@@ -1,0 +1,121 @@
+# =============================================================================
+# MCP Search - standalone server (MySQL)
+# =============================================================================
+# This is the runnable app's config. It combines:
+#   - the DataSource + adapter config (same shape as examples/mysql/application.yml)
+#   - Spring AI model config (embeddings + optional chat for the refine stage)
+#   - app-level toggles for the optional whole-schema search tool
+#
+# Set the secrets via environment variables before running:
+#   export DB_PASSWORD=...           # your MySQL password
+#   export OPENAI_API_KEY=...        # for embeddings (and the refine LLM, if enabled)
+# =============================================================================
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/mydb
+    username: myuser
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  ai:
+    # Spring AI OpenAI client - backs the embedding model and (if refine enabled) the chat model.
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      embedding:
+        options:
+          model: text-embedding-3-small   # 1536 dims - must match app.search.embedding-dimensions
+      chat:
+        options:
+          model: gpt-4o-mini              # only used when app.search.llm-refine-enabled=true
+    mcp:
+      server:
+        name: mysql-search-server
+        version: 1.0.0
+        protocol: STREAMABLE
+
+# --- single-table search (the always-on 'search' MCP tool) ---
+search:
+  datasource:
+    type: mysql
+  mysql:
+    table: products
+    id-column: id
+    text-columns:
+      - title
+      - body
+    vector-column: embedding          # requires MySQL 9.0+; omit for text-only
+    distance-metric: COSINE
+    # How many rows the vector channel pulls back to rank in-app. This matters on MySQL:
+    # Community Edition has no DISTANCE() function, so the database CANNOT sort by similarity -
+    # this LIMIT takes an arbitrary slice and only that slice gets cosine-ranked. Keep it >= your
+    # row count for correct semantic ranking. Default 10000; the adapter logs a warning if a query
+    # ever hits the cap (meaning results may be incomplete).
+    vector-candidate-pool-size: 10000
+    select-columns:
+      - id
+      - title
+      - price
+  hybrid:
+    default-mode: RRF
+    default-alpha: 0.5
+    default-top-k: 10
+  mcp:
+    tool-name: search
+    tool-description: Hybrid full-text and semantic search over the products table.
+
+# --- app-level: embedding size + optional whole-schema 'search_schema' tool ---
+app:
+  search:
+    embedding-model-name: text-embedding-3-small
+    embedding-dimensions: 1536        # MUST equal your VECTOR(n) column size
+    # --- embedding cache: every search embeds its query text, and real traffic repeats
+    # queries constantly, so caching removes an API round-trip (and its cost) from repeats.
+    embedding-cache-enabled: true
+    embedding-cache-max-entries: 10000
+    # --- retry: transient failures (429 rate limit, timeouts, 5xx) are retried with
+    # exponential backoff; permanent ones (bad key, no quota) fail fast without retrying.
+    embedding-retry-enabled: true
+    embedding-retry-max-attempts: 3
+    schema-search-enabled: false      # set true to expose the whole-schema 'search_schema' tool
+    llm-refine-enabled: false         # set true to add the LLM refine stage to schema search
+    # --- whole-schema search tuning (only used when schema-search-enabled: true) ---
+    # Table selection compares your query against TABLE METADATA (name, columns, and any
+    # table/column COMMENTS) - not row data - so similarities are naturally low; 0.1-0.2 is
+    # normal even for a genuinely relevant table. Keep this permissive.
+    # Far more effective than tuning this: add real COMMENTs to your tables/columns
+    # (see examples/mysql/add-table-comments.sql) so there is something meaningful to match.
+    schema-min-similarity: 0.05
+    schema-shortlist-size: 10         # tables passed from embedding shortlist to the LLM refiner
+    schema-fk-depth: 1                # how many foreign-key hops to expand from selected tables
+    schema-max-tables: 15             # hard cap on tables searched per query
+    schema-top-k: 10                  # max results returned
+
+  # --- one-shot embedding backfill (populates NULL embedding columns, then exits) ---
+  # Set enabled: true and run the app ONCE to embed existing rows. It fills every row whose
+  # embedding is NULL, logs progress, and exits (stop-after: true). Then set enabled back to
+  # false and run normally. Requires the OpenAI key to be working (billing active).
+  backfill:
+    enabled: false                    # flip to true for a one-time backfill run
+    stop-after: true                  # exit the JVM when done (it's a one-shot utility)
+    batch-size: 32                    # rows embedded per OpenAI call (batched = far fewer round-trips)
+    table: products
+    id-column: id
+    vector-column: embedding
+    text-columns:                     # concatenated (space-joined) to form the embedded text
+      - title
+      - body
+
+# =============================================================================
+# RUNNING
+# =============================================================================
+#   mvn -pl search-mcp-server-app -am package
+#   java -jar search-mcp-server-app/target/search-mcp-server-app-0.1.0-SNAPSHOT.jar
+#
+# or during development:
+#   mvn -pl search-mcp-server-app -am spring-boot:run
+#
+# The MCP server is then reachable over Streamable-HTTP for any MCP client
+# (Claude Desktop, etc.) to connect and call the `search` tool (and
+# `search_schema` if you enabled it).
+# =============================================================================
