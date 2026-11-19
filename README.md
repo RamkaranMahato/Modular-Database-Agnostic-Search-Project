@@ -15,6 +15,8 @@ means `search-core` compiles and unit-tests in isolation, in any Java build,
 which is a good sign the abstraction is honest rather than secretly coupled
 to Spring idioms.
 
+
+
 ## What's here
 
 ```
